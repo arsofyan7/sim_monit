@@ -51,7 +51,7 @@ func (a *Aggregator) Start() {
 
 // AggregateHourly aggregates raw metrics from the previous hour into metrics_hourly
 func (a *Aggregator) AggregateHourly() {
-	now := time.Now().UTC()
+	now := time.Now()
 	oneHourAgo := now.Add(-1 * time.Hour).Format("2006-01-02 15:00:00")
 	currentHour := now.Format("2006-01-02 15:00:00")
 
@@ -83,7 +83,7 @@ func (a *Aggregator) AggregateHourly() {
 
 // AggregateDaily aggregates hourly metrics into metrics_daily with uptime percentage
 func (a *Aggregator) AggregateDaily() {
-	now := time.Now().UTC()
+	now := time.Now()
 	yesterday := now.Add(-24 * time.Hour).Format("2006-01-02 00:00:00")
 	today := now.Format("2006-01-02 00:00:00")
 

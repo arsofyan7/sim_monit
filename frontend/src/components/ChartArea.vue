@@ -16,10 +16,23 @@ const isServerType = computed(() => props.target?.type === 'server')
 
 // Format timestamps for X-axis categories
 const categories = computed(() => {
+  if (!props.metrics || props.metrics.length === 0) return []
+
+  // Check if dataset spans more than 24 hours
+  let spansMultipleDays = false
+  if (props.metrics.length > 1) {
+    const first = new Date(props.metrics[0].timestamp)
+    const last = new Date(props.metrics[props.metrics.length - 1].timestamp)
+    spansMultipleDays = (last - first) > 24 * 3600 * 1000
+  }
+
   return props.metrics.map((m) => {
     const d = new Date(m.timestamp)
     if (props.scale === 'Daily Avg') {
       return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    }
+    if (props.scale === 'Hourly Avg' || spansMultipleDays) {
+      return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
     }
     return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   })

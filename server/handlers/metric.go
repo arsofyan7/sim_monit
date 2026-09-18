@@ -45,10 +45,11 @@ func (h *MetricHandler) GetTargetMetrics(c *gin.Context) {
 	if validRanges[rawRange] {
 		timeRange = rawRange
 	}
-	now := time.Now().UTC()
+	now := time.Now()
 
-	var startTime time.Time
+	var startTime, endTime time.Time
 	var scale string
+	endTime = now
 
 	switch timeRange {
 	case "1h":
@@ -61,34 +62,38 @@ func (h *MetricHandler) GetTargetMetrics(c *gin.Context) {
 		startTime = now.AddDate(0, 0, -7)
 		scale = "Raw Data"
 	case "mtd":
-		// Month to date
-		startTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		// Month to date: start of current month at 00:00:00
+		startTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 		scale = "Hourly Avg"
 	case "ytd":
-		// Year to date
-		startTime = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+		// Year to date: start of current year at 00:00:00
+		startTime = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
 		scale = "Daily Avg"
 	case "custom":
 		fromStr := c.Query("from")
 		toStr := c.Query("to")
+
 		if fromStr != "" {
-			t, err := time.Parse(time.RFC3339, fromStr)
-			if err == nil {
+			if t, err := time.Parse(time.RFC3339, fromStr); err == nil {
 				startTime = t
+			} else if t2, err2 := time.Parse("2006-01-02", fromStr); err2 == nil {
+				startTime = time.Date(t2.Year(), t2.Month(), t2.Day(), 0, 0, 0, 0, now.Location())
 			} else {
-				t2, err2 := time.Parse("2006-01-02", fromStr)
-				if err2 == nil {
-					startTime = t2
-				} else {
-					startTime = now.Add(-24 * time.Hour)
-				}
+				startTime = now.Add(-24 * time.Hour)
 			}
 		} else {
 			startTime = now.Add(-24 * time.Hour)
 		}
 
-		// Check duration for scale decision
-		duration := now.Sub(startTime)
+		if toStr != "" {
+			if t, err := time.Parse(time.RFC3339, toStr); err == nil {
+				endTime = t
+			} else if t2, err2 := time.Parse("2006-01-02", toStr); err2 == nil {
+				endTime = time.Date(t2.Year(), t2.Month(), t2.Day(), 23, 59, 59, 999999999, now.Location())
+			}
+		}
+
+		duration := endTime.Sub(startTime)
 		if duration <= 7*24*time.Hour {
 			scale = "Raw Data"
 		} else if duration <= 90*24*time.Hour {
@@ -96,7 +101,6 @@ func (h *MetricHandler) GetTargetMetrics(c *gin.Context) {
 		} else {
 			scale = "Daily Avg"
 		}
-		_ = toStr
 	default:
 		startTime = now.Add(-1 * time.Hour)
 		scale = "Raw Data"
@@ -104,14 +108,15 @@ func (h *MetricHandler) GetTargetMetrics(c *gin.Context) {
 
 	dataPoints := make([]models.ChartDataPoint, 0)
 	startTimeStr := startTime.Format("2006-01-02 15:04:05")
+	endTimeStr := endTime.Format("2006-01-02 15:04:05")
 
 	if scale == "Raw Data" {
 		rows, err := h.db.Query(`
 			SELECT timestamp, latency_ms, cpu_pct, ram_pct, disk_pct, network_speed, raw_details
 			FROM metrics_raw
-			WHERE target_id = ? AND timestamp >= ?
+			WHERE target_id = ? AND timestamp >= ? AND timestamp <= ?
 			ORDER BY timestamp ASC
-		`, targetID, startTimeStr)
+		`, targetID, startTimeStr, endTimeStr)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -137,9 +142,9 @@ func (h *MetricHandler) GetTargetMetrics(c *gin.Context) {
 		rows, err := h.db.Query(`
 			SELECT timestamp, avg_latency, max_latency, avg_cpu, avg_ram, avg_disk
 			FROM metrics_hourly
-			WHERE target_id = ? AND timestamp >= ?
+			WHERE target_id = ? AND timestamp >= ? AND timestamp <= ?
 			ORDER BY timestamp ASC
-		`, targetID, startTimeStr)
+		`, targetID, startTimeStr, endTimeStr)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -151,14 +156,42 @@ func (h *MetricHandler) GetTargetMetrics(c *gin.Context) {
 				}
 			}
 		}
+
+		// Fallback: If metrics_hourly is not yet populated by the worker, aggregate from metrics_raw on-the-fly
+		if len(dataPoints) == 0 {
+			rawHourlyRows, err := h.db.Query(`
+				SELECT 
+					strftime('%Y-%m-%d %H:00:00', timestamp) as hour_slot,
+					AVG(latency_ms) as avg_latency,
+					MAX(latency_ms) as max_latency,
+					AVG(cpu_pct) as avg_cpu,
+					AVG(ram_pct) as avg_ram,
+					AVG(disk_pct) as avg_disk
+				FROM metrics_raw
+				WHERE target_id = ? AND timestamp >= ? AND timestamp <= ?
+				GROUP BY hour_slot
+				ORDER BY hour_slot ASC
+			`, targetID, startTimeStr, endTimeStr)
+			if err == nil {
+				defer rawHourlyRows.Close()
+				for rawHourlyRows.Next() {
+					var dp models.ChartDataPoint
+					var ts string
+					if err := rawHourlyRows.Scan(&ts, &dp.LatencyMs, &dp.MaxLatencyMs, &dp.CPUPct, &dp.RAMPct, &dp.DiskPct); err == nil {
+						dp.Timestamp, _ = time.Parse("2006-01-02 15:04:05", ts)
+						dataPoints = append(dataPoints, dp)
+					}
+				}
+			}
+		}
 	} else {
 		// Daily Avg
 		rows, err := h.db.Query(`
 			SELECT timestamp, avg_latency, max_latency, avg_cpu, avg_ram, avg_disk
 			FROM metrics_daily
-			WHERE target_id = ? AND timestamp >= ?
+			WHERE target_id = ? AND timestamp >= ? AND timestamp <= ?
 			ORDER BY timestamp ASC
-		`, targetID, startTimeStr)
+		`, targetID, startTimeStr, endTimeStr)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
@@ -167,6 +200,34 @@ func (h *MetricHandler) GetTargetMetrics(c *gin.Context) {
 				if err := rows.Scan(&ts, &dp.LatencyMs, &dp.MaxLatencyMs, &dp.CPUPct, &dp.RAMPct, &dp.DiskPct); err == nil {
 					dp.Timestamp, _ = time.Parse("2006-01-02 15:04:05", ts)
 					dataPoints = append(dataPoints, dp)
+				}
+			}
+		}
+
+		// Fallback: If metrics_daily has no records yet, aggregate from metrics_raw on-the-fly
+		if len(dataPoints) == 0 {
+			rawDailyRows, err := h.db.Query(`
+				SELECT 
+					strftime('%Y-%m-%d 00:00:00', timestamp) as day_slot,
+					AVG(latency_ms) as avg_latency,
+					MAX(latency_ms) as max_latency,
+					AVG(cpu_pct) as avg_cpu,
+					AVG(ram_pct) as avg_ram,
+					AVG(disk_pct) as avg_disk
+				FROM metrics_raw
+				WHERE target_id = ? AND timestamp >= ? AND timestamp <= ?
+				GROUP BY day_slot
+				ORDER BY day_slot ASC
+			`, targetID, startTimeStr, endTimeStr)
+			if err == nil {
+				defer rawDailyRows.Close()
+				for rawDailyRows.Next() {
+					var dp models.ChartDataPoint
+					var ts string
+					if err := rawDailyRows.Scan(&ts, &dp.LatencyMs, &dp.MaxLatencyMs, &dp.CPUPct, &dp.RAMPct, &dp.DiskPct); err == nil {
+						dp.Timestamp, _ = time.Parse("2006-01-02 15:04:05", ts)
+						dataPoints = append(dataPoints, dp)
+					}
 				}
 			}
 		}
@@ -256,8 +317,9 @@ func (h *MetricHandler) GetTargetStats(c *gin.Context) {
 	if validRanges[rawRange] {
 		timeRange = rawRange
 	}
-	now := time.Now().UTC()
-	var startTime time.Time
+	now := time.Now()
+	var startTime, endTime time.Time
+	endTime = now
 
 	switch timeRange {
 	case "1h":
@@ -267,35 +329,45 @@ func (h *MetricHandler) GetTargetStats(c *gin.Context) {
 	case "7d":
 		startTime = now.AddDate(0, 0, -7)
 	case "mtd":
-		startTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		startTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	case "ytd":
-		startTime = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+		startTime = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
 	case "custom":
 		fromStr := c.Query("from")
+		toStr := c.Query("to")
 		if fromStr != "" {
 			if t, err := time.Parse(time.RFC3339, fromStr); err == nil {
 				startTime = t
 			} else if t2, err2 := time.Parse("2006-01-02", fromStr); err2 == nil {
-				startTime = t2
+				startTime = time.Date(t2.Year(), t2.Month(), t2.Day(), 0, 0, 0, 0, now.Location())
 			} else {
 				startTime = now.Add(-24 * time.Hour)
 			}
 		} else {
 			startTime = now.Add(-24 * time.Hour)
 		}
+
+		if toStr != "" {
+			if t, err := time.Parse(time.RFC3339, toStr); err == nil {
+				endTime = t
+			} else if t2, err2 := time.Parse("2006-01-02", toStr); err2 == nil {
+				endTime = time.Date(t2.Year(), t2.Month(), t2.Day(), 23, 59, 59, 999999999, now.Location())
+			}
+		}
 	default:
 		startTime = now.Add(-24 * time.Hour)
 	}
 
 	startTimeStr := startTime.Format("2006-01-02 15:04:05")
+	endTimeStr := endTime.Format("2006-01-02 15:04:05")
 	var totalChecks, onlineChecks int
 	_ = h.db.QueryRow(`
 		SELECT 
 			COUNT(*), 
 			COUNT(CASE WHEN json_extract(raw_details, '$.status') = 'ONLINE' OR (json_extract(raw_details, '$.status') IS NULL AND raw_details NOT LIKE '%"error"%' AND raw_details NOT LIKE '%"port_status":"CLOSED"%') THEN 1 END)
 		FROM metrics_raw
-		WHERE target_id = ? AND timestamp >= ?
-	`, targetID, startTimeStr).Scan(&totalChecks, &onlineChecks)
+		WHERE target_id = ? AND timestamp >= ? AND timestamp <= ?
+	`, targetID, startTimeStr, endTimeStr).Scan(&totalChecks, &onlineChecks)
 
 	uptimeRate := 100.0
 	if totalChecks > 0 {

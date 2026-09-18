@@ -32,7 +32,7 @@ func (p *Purger) Start() {
 }
 
 func (p *Purger) PurgeOldMetrics() {
-	now := time.Now().UTC()
+	now := time.Now()
 
 	// 1. Purge metrics_raw older than 7 days
 	sevenDaysAgo := now.AddDate(0, 0, -7).Format("2006-01-02 15:04:05")
