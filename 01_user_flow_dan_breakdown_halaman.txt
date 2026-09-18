@@ -1,0 +1,69 @@
+======================================================================
+           RINCIAN ALUR APLIKASI (USER FLOW) & BREAKDOWN HALAMAN
+======================================================================
+
+1. ALUR APLIKASI (USER FLOW)
+----------------------------------------------------------------------
+[ Start ]
+    │
+    ▼
+[ Halaman Auth ]
+    ├─ Belum Punya Akun? ──> Register ──> Save User DB ──┐
+    └─ Sudah Punya Akun? ──> Login ──> Verify Token/Session ◄┘
+    │
+    ▼
+[ Pengecekan Target Monitoring ]
+    │
+    ├─ [Kondisi A: Belum ada target]
+    │      └─> Redirect ke Halaman Dashboard Empty State
+    │             └─> User Klik Tombol "+ Tambah Monitoring"
+    │                    └─> Modal Form Create Target (Server/Web/DB/API)
+    │                           └─> Save Target DB & Trigger Polling Process
+    │                                  └─> Redirect ke Kondisi B
+    │
+    └─ [Kondisi B: Sudah ada target]
+           └─> Redirect ke Halaman Monitoring (Main View)
+                  ├─ Pilih Target (Dropdown Selector)
+                  ├─ Filter Rentang Waktu (1H, 24H, 7D, MTD, YTD, Custom)
+                  ├─ Lihat Metrik Analytics Real-time & Historis
+                  ├─ Buka Menu "Manage Targets" (CRUD: Create, Edit, Delete)
+                  └─ Logout ──> Clear Session/Token ──> Redirect ke Halaman Auth
+
+
+2. BREAKDOWN HALAMAN APLIKASI
+----------------------------------------------------------------------
+A. Halaman Authentication (/login & /register)
+   - Form Login (Email, Password, Tombol Login)
+   - Form Register (Nama, Email, Password, Tombol Register)
+   - Handling pesan error (kredensial salah, email sudah terdaftar)
+
+B. Halaman Dashboard Utama (/dashboard)
+   - Header / Top Navigation Bar:
+     * Logo & Nama Aplikasi
+     * Dropdown Pilihan Target Monitoring
+     * User Profile Info & Tombol Logout
+     * Pilihan / settingan visualisasi dark mode atau light mode
+
+   - State 1 (Empty State):
+     * Ilustrasi / Pesan "Belum ada server atau service yang dipantau"
+     * Tombol Utama "+ Tambah Target Monitoring"
+   - State 2 (Active Monitoring State):
+     * Top Stat Cards Bar (Status, Latency, Uptime, Alert Count)
+     * Filter Controller Waktu (Pill buttons: 1H, 24H, 7D, MTD, YTD + Custom Picker)
+     * Main Chart Area (Stacked Area / Multi-line Chart)
+     * Service & Port Health Matrix
+
+C. Halaman / Modal Manage Target Monitoring (/targets)
+   - Tabel Daftar Target Monitoring:
+     * Kolom: Nama Target, Tipe (Server/Web/DB/API), Host/IP, Polling Interval, Status, Aksi
+   - Form Create / Edit Target:
+     * Field Nama Target (misal: "Server DB Prod")
+     * Field Tipe Target:
+       - Server (Linux SSH): IP/Host, Port SSH (22), User, Auth (Password/SSH Key)
+       - Website (HTTP/HTTPS): URL Target, Expected Status Code (200 OK)
+       - API Endpoint: URL Target, HTTP Method (GET/POST/PUT), Request Headers
+       - Database: Host/IP, Port (5432, 3306, dll), DB Name
+     * Field Polling Interval (10 detik, 30 detik, 1 menit, 5 menit)
+     * Tombol "Test Connection" (Cek validasi sebelum simpan)
+     * Tombol Simpan & Batal
+   - Modal Konfirmasi Delete Target (Beserta opsi hapus data historis)

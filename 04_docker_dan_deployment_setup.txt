@@ -1,0 +1,81 @@
+======================================================================
+     DOCKER CONFIGURATION & TRAEFIK REVERSE PROXY SETUP (REVISED)
+======================================================================
+
+1. ARSITEKTUR CONTAINER & TRAEFIK INTEGRATION
+----------------------------------------------------------------------
+Aplikasi monitoring hanya menggunakan 1 Single Multi-stage Container 
+(atau Backend Go + SQLite yang sudah nge-serve static build Vue.js / Frontend) 
+yang langsung terkoneksi ke External Docker Network `web` milik Traefik.
+
+A. Reverse Proxy (Traefik)
+   - Network External: `web` (Satu jaringan dengan container Traefik v2.11)
+   - SSL/TLS         : Otomatis via Let's Encrypt (`myresolver`)
+   - Route Rule      : Host-based routing (misal: Host(`monitor.siberhub.id`))
+
+B. Embedded Database (SQLite)
+   - Menggunakan SQLite file (`monitoring.db`) untuk performa tinggi & hemat RAM.
+   - Tanpa container DB terpisah (Postgres/MySQL) untuk menghemat resource server.
+   - Persistence via Volume Mount lokal: `./data.db:/app/data.db`
+
+
+2. DOCKER COMPOSE SPECIFICATION (`docker-compose.yml`)
+----------------------------------------------------------------------
+version: '3.8'
+
+services:
+  monitoring:
+    build: .
+    container_name: server_monitoring_app
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M   # Sangat hemat RAM karena Go + SQLite
+    environment:
+      - PORT=8080
+      - DB_PATH=/app/monitoring.db
+      - JWT_SECRET=ganti_dengan_secret_key_bebas
+    volumes:
+      # Data SQLite dipersist ke host
+      - ./monitoring.db:/app/monitoring.db
+      # Directory SSH Keys jika ingin nembak server target pake key
+      - ~/.ssh:/root/.ssh:ro
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      # Ganti subdomain sesuai keinginan lu bro (misal: monitor.siberhub.id)
+      - "traefik.http.routers.monitoring.rule=Host(`monitor.siberhub.id`)"
+      - "traefik.http.routers.monitoring.entrypoints=websecure"
+      - "traefik.http.routers.monitoring.tls.certresolver=myresolver"
+      - "traefik.http.services.monitoring.loadbalancer.server.port=8080"
+      - "traefik.docker.network=web"
+
+networks:
+  web:
+    external: true
+
+
+3. METODE EMBEDDED DOCKERFILE (MULTI-STAGE BUILD)
+----------------------------------------------------------------------
+Agar deployment hanya butuh 1 container ringkas:
+
+Stage 1 (Frontend Build):
+  - Base Image : node:18-alpine
+  - Task       : `npm run build` Vue.js ke folder `/app/dist`
+
+Stage 2 (Final Backend + Static Server):
+  - Base Image : golang:1.22-alpine (atau alpine biasa jika binary di-compile)
+  - Task       : Copy Go binary + Copy hasil build Vue `/app/dist`
+  - Internal   : Go Fiber/Gin bertindak sebagai REST API sekaligus serving static file 
+                 `/app/dist` untuk route halaman UI dashboard.
+
+
+4. CATATAN DEPLOYMENT VPS
+----------------------------------------------------------------------
+- Sebelum running `docker compose up -d`, pastikan file DB kosong sudah di-touch:
+  `touch monitoring.db`
+- Traefik akan otomatis mengarahkan HTTPS dengan sertifikat SSL aktif via `myresolver`.
+- Aplikasi ini siap berdampingan aman dengan container lain (Wazuh, Swingmaster, OpenCTI) 
+  tanpa bentrok port.

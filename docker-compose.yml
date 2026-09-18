@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  monitoring:
+    build: .
+    container_name: server_monitoring_app
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    environment:
+      - PORT=8080
+      - DB_PATH=/app/monitoring.db
+      - JWT_SECRET=change_this_to_a_secure_random_jwt_secret_key
+      - GIN_MODE=release
+    volumes:
+      # Data SQLite dipersist ke host
+      - ./monitoring.db:/app/monitoring.db
+      # Directory SSH Keys jika ingin nembak server target pake key
+      - ~/.ssh:/root/.ssh:ro
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.monitoring.rule=Host(`monitor.siberhub.id`)"
+      - "traefik.http.routers.monitoring.entrypoints=websecure"
+      - "traefik.http.routers.monitoring.tls.certresolver=myresolver"
+      - "traefik.http.services.monitoring.loadbalancer.server.port=8080"
+      - "traefik.docker.network=web"
+
+networks:
+  web:
+    external: true

@@ -1,0 +1,73 @@
+======================================================================
+         TEKNIS & TECH STACK APLIKASI MONITORING (SQLITE VERSION)
+======================================================================
+
+1. SPESIFIKASI TECH STACK UTAMA
+----------------------------------------------------------------------
+A. Backend Engine (Polling & Collector)
+   - Language/Runtime : Go (Golang 1.22+)
+   - Framework API     : Fiber / Gin (High-performance HTTP Framework)
+   - SSH Client        : golang.org/x/crypto/ssh (Native SSH client untuk Agentless Server check)
+   - Auth Protocol     : JWT (JSON Web Token) dengan HTTP-Only Cookie / Bearer Token
+   - SQLite Driver     : modernc.org/sqlite (Pure Go, CGO-free agar build Docker sangat enteng) 
+                         atau github.com/mattn/go-sqlite3
+
+B. Frontend Dashboard
+   - Framework        : Vue.js 3 (Composition API, Script Setup)
+   - State Management : Pinia
+   - UI / Styling     : Tailwind CSS (Dark Mode Slate Theme) + Lucide Icons
+   - Chart Library    : ApexCharts / Chart.js / ECharts (Multi-layer Stacked Area & Smooth Line Chart)
+
+C. Database & Storage Strategy (Embedded SQLite)
+   - Database File     : Embedded SQLite (`monitoring.db`)
+   - PRAGMA Optimization (Wajib di Go saat Init DB):
+     * `PRAGMA journal_mode=WAL;` (Write-Ahead Logging agar query READ & WRITE tidak saling lock)
+     * `PRAGMA synchronous=NORMAL;`
+     * `PRAGMA busy_timeout=5000;`
+   - Storage Optimization: Manual Background Worker (Hourly & Daily Aggregate Table)
+
+
+2. STRUKTUR DATABASE & SKEMA AGREGASI (SQLITE DDL)
+----------------------------------------------------------------------
+A. Tabel Utilitas
+   - `users`
+     `id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, password_hash TEXT, created_at DATETIME`
+   - `targets`
+     `id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT, type TEXT, host TEXT, port INTEGER, auth_config TEXT, polling_interval INTEGER, status TEXT, created_at DATETIME`
+
+B. Tabel Metrik (Historical Data Optimization)
+   - `metrics_raw`
+     `id INTEGER PRIMARY KEY AUTOINCREMENT, target_id INTEGER, timestamp DATETIME, latency_ms REAL, cpu_pct REAL, ram_pct REAL, disk_pct REAL, network_speed REAL, raw_details TEXT`
+     *(Data mentah interval, Auto-Purge via cron/worker internal jika timestamp > 7 hari)*
+   - `metrics_hourly`
+     `id INTEGER PRIMARY KEY AUTOINCREMENT, target_id INTEGER, timestamp DATETIME, avg_latency REAL, max_latency REAL, avg_cpu REAL, avg_ram REAL, avg_disk REAL`
+     *(Agregasi per 1 jam, Retention: 90 hari)*
+   - `metrics_daily`
+     `id INTEGER PRIMARY KEY AUTOINCREMENT, target_id INTEGER, timestamp DATETIME, avg_latency REAL, max_latency REAL, avg_cpu REAL, avg_ram REAL, avg_disk REAL, uptime_pct REAL`
+     *(Agregasi per 1 hari, Retention: Permanen / YTD Support)*
+
+C. Index Wajib (Agar Query Chart Instan)
+   - `CREATE INDEX idx_metrics_raw_target_time ON metrics_raw(target_id, timestamp);`
+   - `CREATE INDEX idx_metrics_hourly_target_time ON metrics_hourly(target_id, timestamp);`
+   - `CREATE INDEX idx_metrics_daily_target_time ON metrics_daily(target_id, timestamp);`
+
+
+3. METODE AGENTLESS POLLING & DATA COLLECTION
+----------------------------------------------------------------------
+A. Server Target (Linux via SSH)
+   - Koneksi SSH non-interactive menggunakan Go SSH package.
+   - Eksekusi command Linux instan dalam 1 session:
+     `uptime | awk ...; free -m ...; df -h ...; top -bn1 ...`
+   - Data diproses di memori Go backend, disimpan ke `metrics_raw`, lalu koneksi SSH ditutup.
+
+B. Website / API / DB Endpoint
+   - HTTP Client (GET/HEAD) untuk mengukur latency (DNS, TCP, TLS, TTFB) & Status Code.
+   - Net Dial / TCP Ping untuk pengecekan open port DB/Custom Service.
+
+
+4. STRATEGI QUERY CHUNK BERDASARKAN TIME-RANGE
+----------------------------------------------------------------------
+Saat Frontend meminta data chart dengan filter waktu:
+- Range < 7 Hari (1H, 24H, 7D)  --> Query dari tabel `metrics_raw`
+- Range 7 Hari - 90 Hari (MTD)  --> Query dari tabel `metrics_hourly`
+- Range > 90 Hari (YTD, Custom) --> Query dari tabel `metrics_daily`

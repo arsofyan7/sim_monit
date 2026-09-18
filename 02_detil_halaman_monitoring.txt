@@ -1,0 +1,82 @@
+======================================================================
+               DETIL SPESIFIKASI HALAMAN MONITORING
+======================================================================
+
+1. TOP NAVIGATION & FILTER BAR
+----------------------------------------------------------------------
+- Target Selector Dropdown:
+  * Nampilin daftar nama target beserta ikon tipe (Server/Web/DB/API)
+  * Badges indikator status kecil (Hijau = UP, Merah = DOWN)
+- Time-Range Filter Controller:
+  * Quick Buttons: [1H] [24H] [7D] [MTD] [YTD]
+  * Custom Date Range Picker: Modal kalender untuk pilih rentang tanggal spesifik
+  * Indicator Subtext: Penanda skala data DB (misal: "Scale: Raw Data" / "Scale: Hourly Avg" / "Scale: Daily Avg")
+- Tombol Manajemen Target: Shortcut "+ Kelola Target" untuk buka modal CRUD.
+- Profile & Logout: Avatar user + Tombol Logout.
+
+
+2. TOP STAT CARDS (HEALTH & METRICS SNAPSHOT)
+----------------------------------------------------------------------
+Card 1: Overall System Status & Heartbeat
+  - Label: Status Target
+  - Visual: Status Text ("ONLINE" / "OFFLINE") + Animated Pulse Dot (Neon Green / Red)
+  - Subtext: Duration Status (misal: "Up for 14d 6h 23m")
+
+Card 2: Average Latency & Response Time
+  - Label: Response Time / Latency
+  - Visual: Angka Latency saat ini (misal: "42 ms")
+  - Subtext: Mini Sparkline Trend Chart (Pergerakan 1 jam terakhir)
+
+Card 3: Overall Uptime Rate
+  - Label: Service Availability
+  - Visual: Persentase Uptime (misal: "99.95%")
+  - Subtext: Calculated based on selected time-range
+
+Card 4: Resource Overview / Health Summary
+  - Tipe Server: Quick Mini Gauge (% CPU & % RAM saat ini)
+  - Tipe Web/API/DB: HTTP Status Code (misal: "200 OK") / Port Status ("Listening")
+
+
+3. MAIN ANALYTICS CHART AREA (STACKED AREA / LINE CHART)
+----------------------------------------------------------------------
+- Visual Style: Dark background, smooth bezier curves, gradient translucent fill, glowing lines.
+- Dynamic Chart Display (Sesuai Tipe Target):
+
+  A. Tipe Website / API Endpoint (Latency Breakdown - Stacked Area):
+     * Layer 1 (Purple): DNS Lookup Time
+     * Layer 2 (Blue): TCP Connect Time
+     * Layer 3 (Cyan): TLS/SSL Handshake Time
+     * Layer 4 (Teal): TTFB (Time to First Byte)
+     * Layer 5 (Green): Content Download / Total Response Time
+
+  B. Tipe Server Linux (System Resource - Multi-Line / Area):
+     * Line 1: CPU Usage (%)
+     * Line 2: RAM Usage (%)
+     * Line 3: Disk I/O & Disk Space Used (%)
+     * Line 4: Network Bandwidth (Upload/Download Speed in MB/s)
+     * Line 5: Response Time / SSH Latency (ms) [Dual Y-Axis Scale]
+
+- Tooltip Interactive: Hover kursor pada titik grafik akan memunculkan floating card 
+  berisi timestamp presisi dan detail nilai tiap layer/metrik.
+
+
+4. SERVICE & PORT MONITORING MATRIX (BOTTOM SECTION)
+----------------------------------------------------------------------
+Grid Card nampilin status port/service internal yang dipantau via agentless check:
+
+- Card Item Example:
+  * Title: SSH Access (Port 22)       -> Status: CONNECTED (Latency 18ms)
+  * Title: Web Server (Port 80/443)   -> Status: LISTENING (200 OK)
+  * Title: PostgreSQL DB (Port 5432) -> Status: LISTENING
+  * Title: Custom Service (Port 8080) -> Status: CLOSED / UNREACHABLE (Alert Icon)
+
+
+5. LOGIC & BEHAVIOR ATURAN TAMPILAN
+----------------------------------------------------------------------
+- Auto Refresh: Visual grafik dan stat card akan ter-update otomatis via WebSocket 
+  atau Polling Background (tanpa reload halaman) sesuai Polling Interval target.
+- Threshold Color Alerting:
+  * Hijau  : Kondisi Normal (CPU/RAM < 80%, Latency normal, Status UP)
+  * Kuning : Warning Threshold (CPU/RAM 80% - 94%, Latency tinggi)
+  * Merah  : Critical / Incident (CPU/RAM >= 95%, Status DOWN / Port Closed)
+- Mode Visualisasi: Toggle untuk memilih antara tampilan grafik Line Chart atau Stacked Area Chart.
