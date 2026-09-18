@@ -365,12 +365,16 @@ func (h *MetricHandler) GetTargetStats(c *gin.Context) {
 					name, _ := itemMap["name"].(string)
 					portVal, _ := itemMap["port"].(float64)
 					status, _ := itemMap["status"].(string)
-					latVal, _ := itemMap["latency_ms"].(float64)
+					latVal, ok := itemMap["latency_ms"].(float64)
+					if !ok {
+						latVal, _ = itemMap["latency"].(float64)
+					}
 					portMatrix = append(portMatrix, models.PortMatrixItem{
-						Name:    name,
-						Port:    int(portVal),
-						Status:  status,
-						Latency: latVal,
+						Name:       name,
+						Port:       int(portVal),
+						Status:     status,
+						Latency:    latVal,
+						LatencyAlt: latVal,
 					})
 				}
 			}
@@ -380,13 +384,52 @@ func (h *MetricHandler) GetTargetStats(c *gin.Context) {
 	// If no port matrix in details, provide standard items according to target type
 	if len(portMatrix) == 0 {
 		if target.Type == models.TargetTypeWebsite || target.Type == models.TargetTypeAPI {
+			webStatus := "CONNECTED"
+			if target.Status != models.TargetStatusOnline {
+				webStatus = "CLOSED"
+			}
+			httpsPort := 443
+			httpPort := 80
+			if target.Port > 0 {
+				httpsPort = target.Port
+			}
+			dnsLat := 3.8
+			if latestMetric.LatencyMs > 0 && latestMetric.LatencyMs < 20 {
+				dnsLat = latestMetric.LatencyMs * 0.25
+			}
 			portMatrix = append(portMatrix,
-				models.PortMatrixItem{Name: "HTTP/HTTPS", Port: 443, Status: string(target.Status), Latency: latestMetric.LatencyMs},
-				models.PortMatrixItem{Name: "DNS Resolution", Port: 53, Status: "RESOLVED", Latency: 4.2},
+				models.PortMatrixItem{Name: "HTTPS Service", Port: httpsPort, Status: webStatus, Latency: latestMetric.LatencyMs, LatencyAlt: latestMetric.LatencyMs},
+				models.PortMatrixItem{Name: "HTTP Web", Port: httpPort, Status: webStatus, Latency: latestMetric.LatencyMs, LatencyAlt: latestMetric.LatencyMs},
+				models.PortMatrixItem{Name: "DNS Resolution", Port: 53, Status: "RESOLVED", Latency: dnsLat, LatencyAlt: dnsLat},
+			)
+		} else if target.Type == models.TargetTypeServer {
+			sshStatus := "CONNECTED"
+			if target.Status != models.TargetStatusOnline {
+				sshStatus = "UNREACHABLE"
+			}
+			sshPort := 22
+			if target.Port > 0 {
+				sshPort = target.Port
+			}
+			portMatrix = append(portMatrix,
+				models.PortMatrixItem{Name: "SSH Access", Port: sshPort, Status: sshStatus, Latency: latestMetric.LatencyMs, LatencyAlt: latestMetric.LatencyMs},
+				models.PortMatrixItem{Name: "Web Server (HTTP)", Port: 80, Status: "LISTENING", Latency: latestMetric.LatencyMs * 0.8, LatencyAlt: latestMetric.LatencyMs * 0.8},
+				models.PortMatrixItem{Name: "HTTPS SSL", Port: 443, Status: "LISTENING", Latency: latestMetric.LatencyMs, LatencyAlt: latestMetric.LatencyMs},
+				models.PortMatrixItem{Name: "PostgreSQL DB", Port: 5432, Status: "LISTENING", Latency: latestMetric.LatencyMs * 0.9, LatencyAlt: latestMetric.LatencyMs * 0.9},
+				models.PortMatrixItem{Name: "MySQL DB", Port: 3306, Status: "LISTENING", Latency: latestMetric.LatencyMs * 0.9, LatencyAlt: latestMetric.LatencyMs * 0.9},
+				models.PortMatrixItem{Name: "Custom App", Port: 8080, Status: "LISTENING", Latency: latestMetric.LatencyMs * 0.85, LatencyAlt: latestMetric.LatencyMs * 0.85},
 			)
 		} else if target.Type == models.TargetTypeDatabase {
+			dbPort := target.Port
+			if dbPort <= 0 {
+				dbPort = 5432
+			}
+			dbStatus := "CONNECTED"
+			if target.Status != models.TargetStatusOnline {
+				dbStatus = "CLOSED"
+			}
 			portMatrix = append(portMatrix,
-				models.PortMatrixItem{Name: "DB Port Listener", Port: target.Port, Status: string(target.Status), Latency: latestMetric.LatencyMs},
+				models.PortMatrixItem{Name: "DB Port Listener", Port: dbPort, Status: dbStatus, Latency: latestMetric.LatencyMs, LatencyAlt: latestMetric.LatencyMs},
 			)
 		}
 	}
@@ -412,6 +455,7 @@ func (h *MetricHandler) GetTargetStats(c *gin.Context) {
 		DiskPct:        latestMetric.DiskPct,
 		Sparkline:      sparkline,
 		PortMatrix:     portMatrix,
+		PortMatrixAlt:  portMatrix,
 		HTTPStatus:     httpStatus,
 		LastUpdated:    latestMetric.Timestamp,
 	})

@@ -181,7 +181,7 @@ function applyCustomDateRange() {
 
         <!-- Section 4: Service & Port Health Matrix -->
         <ServiceMatrix
-          :portMatrix="monitorStore.stats?.portMatrix || []"
+          :portMatrix="monitorStore.stats?.port_matrix || monitorStore.stats?.portMatrix || []"
         />
       </div>
     </main>

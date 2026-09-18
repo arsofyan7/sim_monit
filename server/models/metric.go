@@ -57,10 +57,11 @@ type MetricsQueryResponse struct {
 }
 
 type PortMatrixItem struct {
-	Name    string  `json:"name"`
-	Port    int     `json:"port"`
-	Status  string  `json:"status"` // "CONNECTED", "LISTENING", "CLOSED", "UNREACHABLE"
-	Latency float64 `json:"latency_ms"`
+	Name       string  `json:"name"`
+	Port       int     `json:"port"`
+	Status     string  `json:"status"` // "CONNECTED", "LISTENING", "CLOSED", "UNREACHABLE"
+	Latency    float64 `json:"latency_ms"`
+	LatencyAlt float64 `json:"latency"`
 }
 
 type TargetStatsResponse struct {
@@ -77,6 +78,7 @@ type TargetStatsResponse struct {
 	DiskPct        float64          `json:"disk_pct"`
 	Sparkline      []float64        `json:"sparkline"`
 	PortMatrix     []PortMatrixItem `json:"port_matrix"`
+	PortMatrixAlt  []PortMatrixItem `json:"portMatrix"`
 	HTTPStatus     int              `json:"http_status,omitempty"`
 	LastUpdated    time.Time        `json:"last_updated"`
 }

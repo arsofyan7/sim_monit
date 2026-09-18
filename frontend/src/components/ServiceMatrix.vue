@@ -28,6 +28,14 @@ function getStatusBadge(status) {
       }
   }
 }
+
+function formatLatency(item) {
+  const val = item?.latency_ms ?? item?.latency
+  if (val != null && !isNaN(val) && val > 0) {
+    return val.toFixed(1) + ' ms'
+  }
+  return '--'
+}
 </script>
 
 <template>
@@ -79,7 +87,7 @@ function getStatusBadge(status) {
         <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono text-slate-400">
           <span>Latency Probe:</span>
           <span class="text-slate-300 font-medium">
-            {{ item.latency != null ? item.latency.toFixed(1) + ' ms' : '--' }}
+            {{ formatLatency(item) }}
           </span>
         </div>
       </div>
