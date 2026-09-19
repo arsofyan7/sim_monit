@@ -1,6 +1,9 @@
 <script setup>
 import { computed } from 'vue'
 import VueApexCharts from 'vue3-apexcharts'
+import { useThemeStore } from '../stores/theme'
+
+const themeStore = useThemeStore()
 
 const props = defineProps({
   target: { type: Object, default: null },
@@ -152,7 +155,7 @@ const chartOptions = computed(() => {
         speed: 500,
       },
     },
-    theme: { mode: 'dark' },
+    theme: { mode: themeStore.isDark ? 'dark' : 'light' },
     stroke: {
       curve: 'smooth',
       width: isServerType.value ? [2, 2, 2, 2, 2.5] : 2,
@@ -160,7 +163,7 @@ const chartOptions = computed(() => {
     fill: {
       type: 'gradient',
       gradient: {
-        shade: 'dark',
+        shade: themeStore.isDark ? 'dark' : 'light',
         type: 'vertical',
         shadeIntensity: 0.5,
         gradientToColors: undefined,
@@ -172,7 +175,7 @@ const chartOptions = computed(() => {
     },
     dataLabels: { enabled: false },
     grid: {
-      borderColor: '#1e293b',
+      borderColor: themeStore.isDark ? '#1e293b' : '#e2e8f0',
       strokeDashArray: 4,
       xaxis: { lines: { show: true } },
       yaxis: { lines: { show: true } },
@@ -180,12 +183,12 @@ const chartOptions = computed(() => {
     xaxis: {
       categories: categories.value,
       labels: {
-        style: { colors: '#64748b', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' },
+        style: { colors: themeStore.isDark ? '#64748b' : '#475569', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' },
         rotate: 0,
         maxHeight: 40,
       },
-      axisBorder: { color: '#334155' },
-      axisTicks: { color: '#334155' },
+      axisBorder: { color: themeStore.isDark ? '#334155' : '#cbd5e1' },
+      axisTicks: { color: themeStore.isDark ? '#334155' : '#cbd5e1' },
     },
     yaxis: isServerType.value
       ? [

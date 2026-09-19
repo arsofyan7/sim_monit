@@ -2,6 +2,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useMonitorStore } from '../stores/monitor'
+import { useThemeStore } from '../stores/theme'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -12,6 +13,7 @@ const props = defineProps({
 
 const authStore = useAuthStore()
 const monitorStore = useMonitorStore()
+const themeStore = useThemeStore()
 const router = useRouter()
 
 const dropdownOpen = ref(false)
@@ -191,6 +193,30 @@ onUnmounted(() => {
             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
           </svg>
           Kelola Target
+        </button>
+
+        <!-- Theme Toggle (Dark / Light Mode) -->
+        <button
+          @click="themeStore.toggleTheme"
+          :title="themeStore.isDark ? 'Ganti ke Light Mode' : 'Ganti ke Dark Mode'"
+          class="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-amber-400 dark:text-amber-300 border border-slate-700 transition flex items-center justify-center shadow-sm"
+        >
+          <!-- Sun icon when in dark mode (click to switch to light mode) -->
+          <svg v-if="themeStore.isDark" class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <!-- Moon icon when in light mode (click to switch to dark mode) -->
+          <svg v-else class="w-4 h-4 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
         </button>
 
         <!-- User Profile Pill -->
