@@ -59,6 +59,7 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 	authHandler := handlers.NewAuthHandler(db, cfg)
 	targetHandler := handlers.NewTargetHandler(db)
 	metricHandler := handlers.NewMetricHandler(db)
+	notificationHandler := handlers.NewNotificationHandler(db)
 
 	api := r.Group("/api")
 	// Apply general API rate limiter: 120 req/min per IP
@@ -88,9 +89,18 @@ func SetupRouter(db *sql.DB, cfg *config.Config) *gin.Engine {
 				targets.DELETE("/:id", targetHandler.DeleteTarget)
 				targets.POST("/test-connection", targetHandler.TestConnection)
 
-				// Metric routes under target
+				// Metric & Incident routes under target
 				targets.GET("/:id/metrics", metricHandler.GetTargetMetrics)
 				targets.GET("/:id/stats", metricHandler.GetTargetStats)
+				targets.GET("/:id/incidents", metricHandler.GetTargetIncidents)
+			}
+
+			// Notification routes
+			notifications := protected.Group("/notifications")
+			{
+				notifications.GET("/telegram", notificationHandler.GetTelegramSettings)
+				notifications.PUT("/telegram", notificationHandler.UpdateTelegramSettings)
+				notifications.POST("/telegram/test", notificationHandler.TestTelegramNotification)
 			}
 		}
 	}

@@ -53,6 +53,19 @@
   - Real-time heartbeat pulse indicator (Hijau = UP, Kuning = Warning, Merah = Critical/Down).
   - Grafik interaktif ApexCharts dengan kurva bezier halus, multi-layer stacked area, dan mode toggle.
   - Filter rentang waktu cepat: `1H`, `24H`, `7D`, `MTD`, `YTD`, serta custom date range picker.
+- 📢 **Instant Telegram Alerting (Hybrid Routing)**:
+  - **Down Alert (🔴)**: Notifikasi instan saat target offline (menampilkan nama target, host, port, error connection, dan timestamp).
+  - **Recovery Alert (🟢)**: Notifikasi otomatis saat target pulih kembali (lengkap dengan info latency pulih dan estimasi total durasi downtime).
+  - **Hybrid Routing**: Opsi menggunakan 1 Chat ID global untuk semua target, atau konfigurasi Chat ID spesifik per target (grup/channel berbeda).
+  - **Anti-Spam & Fail-Safe**: Alert hanya dikirim saat terjadi transisi status. Jika toggle aktif namun token atau chat ID kosong, sistem mengabaikan eksekusi secara senyap tanpa menimbulkan error log/crash.
+  - **In-App Test Notification**: Tombol uji coba pengiriman pesan langsung dari UI modal untuk memastikan bot terhubung.
+- 🛑 **Persistent Incident & Downtime Tracking**:
+  - Penyimpanan permanen riwayat insiden di database SQLite (`incidents`).
+  - Auto-lifecycle: tercatat otomatis saat target offline (`started_at`), dan otomatis diselesaikan saat online (`resolved_at`, `duration_seconds`).
+  - UI Card Insiden (50% berdampingan dengan Service Matrix): menampilkan badge status *Ongoing (Sedang Down)* vs *Resolved*, rentang jam kejadian, durasi downtime, dan penyebab error.
+- 🔄 **Smart Silent Background Refresh**:
+  - Auto-refresh metrik analitik, port matrix, dan insiden berjalan secara halus di latar belakang tanpa kedipan overlay spinner yang mengganggu pembacaan grafik.
+  - Interval auto-refresh frontend tersinkronisasi otomatis mengikuti `polling_interval` target aktif (10s/30s/60s/300s).
 - 🔐 **Enterprise Secure Coding Standard**:
   - **SQL Injection Prevention**: 100% prepared statements dengan validasi whitelist pada seluruh parameter query.
   - **OWASP Security Headers**: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`, Content Security Policy (CSP), dan Referrer-Policy.
@@ -117,22 +130,24 @@ sim_monit/
 ├── main.go                                  # Entry point aplikasi backend
 ├── go.mod / go.sum                          # Dependensi Golang
 ├── server/                                  # Source code Backend (Go)
+│   ├── alert/                               # Telegram Bot API notification engine
 │   ├── collector/                           # Collector: SSH, HTTP, & TCP agentless
 │   ├── config/                              # Parser environment config
 │   ├── db/                                  # SQLite connection & WAL schema migration
-│   ├── handlers/                            # Controller HTTP (Auth, Target, Metric)
-│   ├── middleware/                          # JWT Authentication middleware
-│   ├── models/                              # Model & struct database
+│   ├── handlers/                            # Controller: Auth, Target, Metric, Notification
+│   ├── middleware/                          # JWT, CORS, Rate-Limit, & Security Headers
+│   ├── models/                              # Target, Metric, Incident, Notification models
 │   ├── routes/                              # Routing Gin REST API & SPA fallback
-│   └── worker/                              # Scheduler, Aggregator, & Purger background
+│   └── worker/                              # Scheduler (transition alerts), Aggregator, Purger
 └── frontend/                                # Source code Frontend (Vue 3)
     ├── package.json                         # Dependensi Vite, Vue, Tailwind, Pinia
     ├── vite.config.js                       # Konfigurasi proxy dev server ke port 8080
     ├── tailwind.config.js                   # Tema Dark Slate UI
     └── src/
         ├── views/                           # LoginView, RegisterView, DashboardView
-        ├── components/                      # StatCard, ChartArea, TargetModal, dll
-        ├── stores/                          # State management Pinia (Auth, Target, UI)
+        ├── components/                      # StatCard, ChartArea, ServiceMatrix, IncidentCard,
+        │                                    # TargetModal, ManageTargetsModal, TelegramAlertModal
+        ├── stores/                          # State management Pinia (Auth, Monitor)
         └── router/                          # Vue Router & Auth Guards
 ```
 
@@ -353,7 +368,15 @@ Semua route API dilindungi oleh JWT Middleware kecuali rute publik `/api/auth/*`
 | Method | Endpoint | Query Param | Deskripsi |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/targets/:id/metrics` | `range=1h\|24h\|7d\|mtd\|ytd` | Mengambil titik data chart (raw/hourly/daily) |
-| `GET` | `/api/targets/:id/stats` | `range=...` | Mengambil ringkasan statistik (uptime %, avg latency, CPU/RAM peak) |
+| `GET` | `/api/targets/:id/stats` | `range=...` | Mengambil ringkasan statistik (uptime %, avg latency, CPU/RAM peak, port matrix) |
+| `GET` | `/api/targets/:id/incidents` | - | Mengambil daftar riwayat insiden downtime (ongoing vs resolved) |
+
+### 📢 Telegram Notification Settings
+| Method | Endpoint | Payload | Deskripsi |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/notifications/telegram` | - | Mengambil konfigurasi bot token, mode, dan chat ID |
+| `PUT` | `/api/notifications/telegram` | `{ telegram_enabled, telegram_bot_token, telegram_mode, telegram_chat_id, target_mappings }` | Menyimpan konfigurasi notifikasi Telegram |
+| `POST` | `/api/notifications/telegram/test` | `{ bot_token, chat_id }` | Mengirim pesan tes verifikasi ke Telegram |
 
 ---
 

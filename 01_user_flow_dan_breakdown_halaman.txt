@@ -23,11 +23,13 @@
     │
     └─ [Kondisi B: Sudah ada target]
            └─> Redirect ke Halaman Monitoring (Main View)
-                  ├─ Pilih Target (Dropdown Selector)
-                  ├─ Filter Rentang Waktu (1H, 24H, 7D, MTD, YTD, Custom)
-                  ├─ Lihat Metrik Analytics Real-time & Historis
-                  ├─ Buka Menu "Manage Targets" (CRUD: Create, Edit, Delete)
-                  └─ Logout ──> Clear Session/Token ──> Redirect ke Halaman Auth
+                   ├─ Pilih Target (Dropdown Selector)
+                   ├─ Filter Rentang Waktu (1H, 24H, 7D, MTD, YTD, Custom)
+                   ├─ Lihat Metrik Analytics Real-time & Historis (Silent Background Refresh)
+                   ├─ Buka Menu "Manage Targets" (CRUD: Create, Edit, Delete)
+                   ├─ Buka Menu "Telegram Alert" (Konfigurasi Bot Token & Hybrid Chat ID)
+                   ├─ Lihat Status Service Matrix (50%) & Riwayat Insiden Downtime (50%)
+                   └─ Logout ──> Clear Session/Token ──> Redirect ke Halaman Auth
 
 
 2. BREAKDOWN HALAMAN APLIKASI
@@ -39,21 +41,35 @@ A. Halaman Authentication (/login & /register)
 
 B. Halaman Dashboard Utama (/dashboard)
    - Header / Top Navigation Bar:
-     * Logo & Nama Aplikasi
-     * Dropdown Pilihan Target Monitoring
+     * Logo & Nama Aplikasi (SIM_MONIT)
+     * Dropdown Pilihan Target Monitoring (Indikator Status Hijau/Merah)
+     * Shortcut Tombol "Telegram Alert" (Pengaturan Notifikasi Bot)
+     * Shortcut Tombol "Kelola Target" (CRUD Modal)
      * User Profile Info & Tombol Logout
-     * Pilihan / settingan visualisasi dark mode atau light mode
 
    - State 1 (Empty State):
      * Ilustrasi / Pesan "Belum ada server atau service yang dipantau"
      * Tombol Utama "+ Tambah Target Monitoring"
-   - State 2 (Active Monitoring State):
-     * Top Stat Cards Bar (Status, Latency, Uptime, Alert Count)
-     * Filter Controller Waktu (Pill buttons: 1H, 24H, 7D, MTD, YTD + Custom Picker)
-     * Main Chart Area (Stacked Area / Multi-line Chart)
-     * Service & Port Health Matrix
 
-C. Halaman / Modal Manage Target Monitoring (/targets)
+   - State 2 (Active Monitoring State):
+     * Top Stat Cards Bar (Status, Latency Sparkline, Availability Uptime, HTTP/Port Status)
+     * Filter Controller Waktu (Pill buttons: 1H, 24H, 7D, MTD, YTD + Custom Date Range Picker)
+     * Main Chart Area (Stacked Area / Multi-line Chart, auto silent refresh)
+     * Grid Section Bawah (Split 50% : 50%):
+       - Kolom Kiri (50%): Service & Port Health Matrix (Live port status, socket probe latency)
+       - Kolom Kanan (50%): Card Riwayat Insiden & Downtime (Log insiden ongoing/resolved, durasi & penyebab)
+
+C. Modal Pengaturan Notifikasi Telegram (/notifications/telegram)
+   - Master Switch: "Aktifkan Alert Telegram" (Default: Non-Aktif)
+   - Input Telegram Bot Token (dengan toggle Show/Hide dan link panduan @BotFather)
+   - Pilihan Distribusi Chat ID:
+     * Mode "Semua Target (Global Chat ID)": Satu Chat ID untuk seluruh target.
+     * Mode "Tentukan Per-Target": Tabel target dinamis dengan switch per target & custom chat ID.
+   - Tombol "Test Kirim Pesan": Verifikasi pengiriman pesan tes instan ke Telegram.
+   - Proteksi aman: jika toggle aktif namun token atau chat ID kosong, proses pengiriman diabaikan secara senyap tanpa menimbulkan error.
+   - Tombol "Simpan Pengaturan"
+
+D. Halaman / Modal Manage Target Monitoring (/targets)
    - Tabel Daftar Target Monitoring:
      * Kolom: Nama Target, Tipe (Server/Web/DB/API), Host/IP, Polling Interval, Status, Aksi
    - Form Create / Edit Target:

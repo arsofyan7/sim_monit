@@ -11,7 +11,8 @@
   * Quick Buttons: [1H] [24H] [7D] [MTD] [YTD]
   * Custom Date Range Picker: Modal kalender untuk pilih rentang tanggal spesifik
   * Indicator Subtext: Penanda skala data DB (misal: "Scale: Raw Data" / "Scale: Hourly Avg" / "Scale: Daily Avg")
-- Tombol Manajemen Target: Shortcut "+ Kelola Target" untuk buka modal CRUD.
+- Tombol Notifikasi Telegram: Shortcut "Telegram Alert" untuk modal konfigurasi Bot Token & Chat ID routing.
+- Tombol Manajemen Target: Shortcut "Kelola Target" untuk buka modal CRUD.
 - Profile & Logout: Avatar user + Tombol Logout.
 
 
@@ -60,23 +61,47 @@ Card 4: Resource Overview / Health Summary
   berisi timestamp presisi dan detail nilai tiap layer/metrik.
 
 
-4. SERVICE & PORT MONITORING MATRIX (BOTTOM SECTION)
+4. BOTTOM GRID SECTION (SPLIT 50% : 50%)
 ----------------------------------------------------------------------
-Grid Card nampilin status port/service internal yang dipantau via agentless check:
+Dibagi menjadi 2 kolom simetris pada layar desktop (responsif 1 kolom pada mobile):
 
-- Card Item Example:
-  * Title: SSH Access (Port 22)       -> Status: CONNECTED (Latency 18ms)
-  * Title: Web Server (Port 80/443)   -> Status: LISTENING (200 OK)
-  * Title: PostgreSQL DB (Port 5432) -> Status: LISTENING
-  * Title: Custom Service (Port 8080) -> Status: CLOSED / UNREACHABLE (Alert Icon)
+A. Service & Port Health Matrix (Lebar 50%)
+   - Grid internal 2 kolom (sm:grid-cols-2) dengan scrollbar internal (max-h: 300px)
+   - Status badge anti-overflow (CONNECTED / LISTENING / CLOSED / UNREACHABLE)
+   - Probe Latency per port / service
+
+B. Card Riwayat Insiden & Downtime (Lebar 50%)
+   - Header: Counter insiden + Live Status Indicator (🔴 "Insiden Aktif" atau 🟢 "Semua Normal")
+   - Empty State: Tampilan tameng hijau saat target beroperasi 100% normal tanpa insiden
+   - Daftar Insiden Terkini (scrollable max-h: 300px):
+     * Status Badge: "SEDANG DOWN" (merah berkedip) jika aktif, "RESOLVED" (hijau) jika pulih
+     * Rentang Waktu: Tanggal dan rentang jam mulai - selesai (WIB)
+     * Durasi Downtime: Format kalkulasi dinamis (misal: "Downtime: 1 Jam 15 Menit" atau "45 Detik")
+     * Keterangan Error: Catatan error (e.g. "Connection timed out" / "Connection refused")
 
 
 5. LOGIC & BEHAVIOR ATURAN TAMPILAN
 ----------------------------------------------------------------------
-- Auto Refresh: Visual grafik dan stat card akan ter-update otomatis via WebSocket 
-  atau Polling Background (tanpa reload halaman) sesuai Polling Interval target.
+- Silent Background Refresh: Auto-refresh data grafik, stat card, port matrix, dan insiden 
+  berjalan di latar belakang secara mulus tanpa memunculkan overlay spinner "Memuat metrik..." 
+  yang menutupi grafik. Overlay loading hanya muncul saat initial load atau ganti target/timeframe.
+- Polling Dynamic Sync: Interval auto-refresh frontend otomatis tersinkronisasi mengikuti 
+  setting polling_interval target aktif (10s/30s/60s/300s).
 - Threshold Color Alerting:
   * Hijau  : Kondisi Normal (CPU/RAM < 80%, Latency normal, Status UP)
   * Kuning : Warning Threshold (CPU/RAM 80% - 94%, Latency tinggi)
   * Merah  : Critical / Incident (CPU/RAM >= 95%, Status DOWN / Port Closed)
 - Mode Visualisasi: Toggle untuk memilih antara tampilan grafik Line Chart atau Stacked Area Chart.
+
+
+6. SISTEM NOTIFIKASI TELEGRAM ALERT (HYBRID)
+----------------------------------------------------------------------
+- Trigger Otomatis:
+  * Status ONLINE/PENDING -> OFFLINE : Kirim notifikasi 🔴 [SIM_MONIT ALERT] TARGET DOWN!
+  * Status OFFLINE -> ONLINE         : Kirim notifikasi 🟢 [SIM_MONIT RECOVERY] TARGET BACK ONLINE! (lengkap durasi downtime)
+- Anti-Spam: Siklus polling biasa yang tidak mengalami transisi status tidak akan mengirim pesan berulang.
+- Mode Hybrid:
+  * Mode "all"        : Menggunakan 1 Chat ID global untuk semua target.
+  * Mode "per_target" : Menggunakan Chat ID spesifik sesuai preferensi per target.
+- Proteksi Safe Execution: Jika toggle diaktifkan namun token atau chat ID kosong, sistem mengabaikan proses pengiriman secara senyap tanpa error.
+- Fitur Test: Tombol "Test Kirim Pesan" di UI untuk validasi konektivitas bot ke Telegram secara langsung.

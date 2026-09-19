@@ -29,11 +29,15 @@ C. Database & Storage Strategy (Embedded SQLite)
 
 2. STRUKTUR DATABASE & SKEMA AGREGASI (SQLITE DDL)
 ----------------------------------------------------------------------
-A. Tabel Utilitas
+A. Tabel Utilitas & Pengaturan
    - `users`
      `id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, password_hash TEXT, created_at DATETIME`
    - `targets`
      `id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT, type TEXT, host TEXT, port INTEGER, auth_config TEXT, polling_interval INTEGER, status TEXT, created_at DATETIME`
+   - `notification_settings`
+     `user_id INTEGER PRIMARY KEY, telegram_enabled INTEGER DEFAULT 0, telegram_bot_token TEXT DEFAULT '', telegram_mode TEXT DEFAULT 'all', telegram_chat_id TEXT DEFAULT '', target_mappings TEXT DEFAULT '{}', updated_at DATETIME`
+   - `incidents`
+     `id INTEGER PRIMARY KEY AUTOINCREMENT, target_id INTEGER NOT NULL, started_at DATETIME NOT NULL, resolved_at DATETIME, duration_seconds INTEGER DEFAULT 0, cause TEXT DEFAULT '', FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE`
 
 B. Tabel Metrik (Historical Data Optimization)
    - `metrics_raw`
@@ -46,10 +50,11 @@ B. Tabel Metrik (Historical Data Optimization)
      `id INTEGER PRIMARY KEY AUTOINCREMENT, target_id INTEGER, timestamp DATETIME, avg_latency REAL, max_latency REAL, avg_cpu REAL, avg_ram REAL, avg_disk REAL, uptime_pct REAL`
      *(Agregasi per 1 hari, Retention: Permanen / YTD Support)*
 
-C. Index Wajib (Agar Query Chart Instan)
+C. Index Wajib (Agar Query Chart & Log Instan)
    - `CREATE INDEX idx_metrics_raw_target_time ON metrics_raw(target_id, timestamp);`
    - `CREATE INDEX idx_metrics_hourly_target_time ON metrics_hourly(target_id, timestamp);`
    - `CREATE INDEX idx_metrics_daily_target_time ON metrics_daily(target_id, timestamp);`
+   - `CREATE INDEX idx_incidents_target_time ON incidents(target_id, started_at DESC);`
 
 
 3. METODE AGENTLESS POLLING & DATA COLLECTION
@@ -71,3 +76,24 @@ Saat Frontend meminta data chart dengan filter waktu:
 - Range < 7 Hari (1H, 24H, 7D)  --> Query dari tabel `metrics_raw`
 - Range 7 Hari - 90 Hari (MTD)  --> Query dari tabel `metrics_hourly`
 - Range > 90 Hari (YTD, Custom) --> Query dari tabel `metrics_daily`
+
+
+5. SISTEM NOTIFIKASI TELEGRAM & INCIDENT LIFECYCLE ENGINE
+----------------------------------------------------------------------
+A. Transisi Status (State Transition Detection)
+   - Background scheduler Go melacak status terakhir (`lastStatus`) dan waktu down (`downSince`).
+   - Transisi ONLINE/PENDING -> OFFLINE:
+     1. Catat waktu mulai down ke memori worker (`downSince[target.ID] = now`).
+     2. Insert record baru ke tabel `incidents` dengan `resolved_at = NULL`.
+     3. Trigger goroutine pengiriman alert Telegram 🔴 DOWN secara asynchronous.
+   - Transisi OFFLINE -> ONLINE:
+     1. Hitung durasi downtime presisi dari `downSince`.
+     2. Update record insiden di tabel `incidents` (`resolved_at = now`, `duration_seconds`).
+     3. Trigger goroutine pengiriman alert Telegram 🟢 RECOVERY (dengan durasi downtime).
+     4. Bersihkan `downSince[target.ID]`.
+
+B. Proteksi Fail-Safe & Zero Overhead
+   - Pengiriman notifikasi berjalan pada Go goroutine non-blocking (`go s.dispatchAlert(...)`) 
+     dengan HTTP client timeout 10 detik.
+   - Jika toggle aktif namun Bot Token atau Chat ID kosong, worker mengabaikan eksekusi 
+     secara senyap tanpa memunculkan error log ataupun crash sistem.

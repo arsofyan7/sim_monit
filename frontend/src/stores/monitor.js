@@ -15,6 +15,7 @@ export const useMonitorStore = defineStore('monitor', () => {
   const metricsData = ref([])
   const metricsScale = ref('Raw Data')
   const stats = ref(null)
+  const incidents = ref([])
   const loading = ref(false)
   const error = ref(null)
 
@@ -67,9 +68,9 @@ export const useMonitorStore = defineStore('monitor', () => {
     }
   }
 
-  async function fetchMetrics(targetId = selectedTargetId.value) {
+  async function fetchMetrics(targetId = selectedTargetId.value, silent = false) {
     if (!targetId || !authStore.token) return
-    loading.value = true
+    if (!silent) loading.value = true
     try {
       let url = `/api/targets/${targetId}/metrics?range=${selectedTimeRange.value}`
       if (selectedTimeRange.value === 'custom' && customDateFrom.value) {
@@ -90,16 +91,31 @@ export const useMonitorStore = defineStore('monitor', () => {
     } catch (err) {
       error.value = err.message
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
 
-  async function refreshAll() {
+  async function fetchTargetIncidents(targetId = selectedTargetId.value) {
+    if (!targetId || !authStore.token) return
+    try {
+      const res = await fetch(`/api/targets/${targetId}/incidents`, {
+        headers: { Authorization: `Bearer ${authStore.token}` },
+      })
+      if (res.ok) {
+        incidents.value = await res.json()
+      }
+    } catch (err) {
+      console.error('Error fetching incidents:', err)
+    }
+  }
+
+  async function refreshAll(silent = false) {
     await fetchTargets()
     if (selectedTargetId.value) {
       await Promise.all([
         fetchTargetStats(selectedTargetId.value),
-        fetchMetrics(selectedTargetId.value),
+        fetchMetrics(selectedTargetId.value, silent),
+        fetchTargetIncidents(selectedTargetId.value),
       ])
     }
   }
@@ -197,11 +213,13 @@ export const useMonitorStore = defineStore('monitor', () => {
     metricsData,
     metricsScale,
     stats,
+    incidents,
     loading,
     error,
     fetchTargets,
     fetchTargetStats,
     fetchMetrics,
+    fetchTargetIncidents,
     refreshAll,
     createTarget,
     updateTarget,

@@ -532,3 +532,63 @@ func (h *MetricHandler) GetTargetStats(c *gin.Context) {
 		LastUpdated:    latestMetric.Timestamp,
 	})
 }
+
+func (h *MetricHandler) GetTargetIncidents(c *gin.Context) {
+	targetID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Target ID tidak valid"})
+		return
+	}
+
+	userID := c.GetInt64("user_id")
+
+	// Verify target ownership
+	var exists int
+	err = h.db.QueryRow(`SELECT 1 FROM targets WHERE id = ? AND user_id = ?`, targetID, userID).Scan(&exists)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Target tidak ditemukan"})
+		return
+	}
+
+	rows, err := h.db.Query(`
+		SELECT id, target_id, started_at, resolved_at, duration_seconds, cause
+		FROM incidents
+		WHERE target_id = ?
+		ORDER BY started_at DESC
+		LIMIT 30
+	`, targetID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengambil daftar insiden: " + err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	incidents := make([]models.Incident, 0)
+	for rows.Next() {
+		var inc models.Incident
+		var startedAtStr string
+		var resolvedAtStr sql.NullString
+
+		if err := rows.Scan(&inc.ID, &inc.TargetID, &startedAtStr, &resolvedAtStr, &inc.DurationSeconds, &inc.Cause); err != nil {
+			continue
+		}
+
+		if t, err := time.Parse("2006-01-02 15:04:05", startedAtStr); err == nil {
+			inc.StartedAt = t
+		} else if t, err := time.Parse(time.RFC3339, startedAtStr); err == nil {
+			inc.StartedAt = t
+		}
+
+		if resolvedAtStr.Valid {
+			if t, err := time.Parse("2006-01-02 15:04:05", resolvedAtStr.String); err == nil {
+				inc.ResolvedAt = &t
+			} else if t, err := time.Parse(time.RFC3339, resolvedAtStr.String); err == nil {
+				inc.ResolvedAt = &t
+			}
+		}
+
+		incidents = append(incidents, inc)
+	}
+
+	c.JSON(http.StatusOK, incidents)
+}

@@ -5,13 +5,16 @@ import Navbar from '../components/Navbar.vue'
 import StatCard from '../components/StatCard.vue'
 import ChartArea from '../components/ChartArea.vue'
 import ServiceMatrix from '../components/ServiceMatrix.vue'
+import IncidentCard from '../components/IncidentCard.vue'
 import TargetModal from '../components/TargetModal.vue'
 import ManageTargetsModal from '../components/ManageTargetsModal.vue'
+import TelegramAlertModal from '../components/TelegramAlertModal.vue'
 
 const monitorStore = useMonitorStore()
 
 const isCreateModalOpen = ref(false)
 const isManageModalOpen = ref(false)
+const isTelegramModalOpen = ref(false)
 const targetToEdit = ref(null)
 
 // Custom Date Range Picker Modal state
@@ -21,16 +24,28 @@ const customTo = ref('')
 
 let pollTimer = null
 
-onMounted(async () => {
-  await monitorStore.refreshAll()
+function restartPollTimer() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
 
-  // Setup auto-refresh polling every 8 seconds
+  // Gunakan polling_interval dari target aktif (fallback 60s, minimal 5s)
+  const intervalSec = Math.max(monitorStore.selectedTarget?.polling_interval || 60, 5)
+  const intervalMs = intervalSec * 1000
+
   pollTimer = setInterval(() => {
     if (monitorStore.selectedTargetId) {
       monitorStore.fetchTargetStats(monitorStore.selectedTargetId)
-      monitorStore.fetchMetrics(monitorStore.selectedTargetId)
+      monitorStore.fetchMetrics(monitorStore.selectedTargetId, true) // silent background update
+      monitorStore.fetchTargetIncidents(monitorStore.selectedTargetId)
     }
-  }, 8000)
+  }, intervalMs)
+}
+
+onMounted(async () => {
+  await monitorStore.refreshAll()
+  restartPollTimer()
 })
 
 onUnmounted(() => {
@@ -39,10 +54,23 @@ onUnmounted(() => {
 
 watch(
   () => monitorStore.selectedTargetId,
-  (newId) => {
+  (newId, oldId) => {
     if (newId) {
-      monitorStore.fetchTargetStats(newId)
-      monitorStore.fetchMetrics(newId)
+      if (newId !== oldId) {
+        monitorStore.fetchTargetStats(newId)
+        monitorStore.fetchMetrics(newId, false) // Tampilkan loading saat user mengganti target
+        monitorStore.fetchTargetIncidents(newId)
+      }
+      restartPollTimer()
+    }
+  }
+)
+
+watch(
+  () => monitorStore.selectedTarget?.polling_interval,
+  (newInterval, oldInterval) => {
+    if (newInterval && newInterval !== oldInterval) {
+      restartPollTimer()
     }
   }
 )
@@ -78,6 +106,7 @@ function applyCustomDateRange() {
     <Navbar
       :onOpenCreateModal="openCreateModal"
       :onOpenManageModal="openManageModal"
+      :onOpenTelegramModal="() => (isTelegramModalOpen = true)"
     />
 
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -179,10 +208,16 @@ function applyCustomDateRange() {
           v-model:chartMode="monitorStore.chartMode"
         />
 
-        <!-- Section 4: Service & Port Health Matrix -->
-        <ServiceMatrix
-          :portMatrix="monitorStore.stats?.port_matrix || monitorStore.stats?.portMatrix || []"
-        />
+        <!-- Section 4: Service Health Matrix (50%) & Incident Log Card (50%) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          <ServiceMatrix
+            :portMatrix="monitorStore.stats?.port_matrix || monitorStore.stats?.portMatrix || []"
+          />
+          <IncidentCard
+            :incidents="monitorStore.incidents"
+            :target="monitorStore.selectedTarget"
+          />
+        </div>
       </div>
     </main>
 
@@ -242,6 +277,11 @@ function applyCustomDateRange() {
       @close="isManageModalOpen = false"
       @openCreate="isManageModalOpen = false; openCreateModal()"
       @openEdit="openEditModal"
+    />
+
+    <TelegramAlertModal
+      :isOpen="isTelegramModalOpen"
+      @close="isTelegramModalOpen = false"
     />
   </div>
 </template>

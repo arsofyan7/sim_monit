@@ -105,10 +105,32 @@ func migrateSchema(db *sql.DB) error {
 		FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE
 	);
 
+	CREATE TABLE IF NOT EXISTS notification_settings (
+		user_id INTEGER PRIMARY KEY,
+		telegram_enabled INTEGER DEFAULT 0,
+		telegram_bot_token TEXT DEFAULT '',
+		telegram_mode TEXT DEFAULT 'all', -- 'all' or 'per_target'
+		telegram_chat_id TEXT DEFAULT '',
+		target_mappings TEXT DEFAULT '{}',
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+
+	CREATE TABLE IF NOT EXISTS incidents (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		target_id INTEGER NOT NULL,
+		started_at DATETIME NOT NULL,
+		resolved_at DATETIME,
+		duration_seconds INTEGER DEFAULT 0,
+		cause TEXT DEFAULT '',
+		FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE
+	);
+
 	-- Indices per spec in file 03
 	CREATE INDEX IF NOT EXISTS idx_metrics_raw_target_time ON metrics_raw(target_id, timestamp);
 	CREATE INDEX IF NOT EXISTS idx_metrics_hourly_target_time ON metrics_hourly(target_id, timestamp);
 	CREATE INDEX IF NOT EXISTS idx_metrics_daily_target_time ON metrics_daily(target_id, timestamp);
+	CREATE INDEX IF NOT EXISTS idx_incidents_target_time ON incidents(target_id, started_at DESC);
 	`
 
 	_, err := db.Exec(schema)
